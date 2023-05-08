@@ -32,42 +32,6 @@ spec:
       hostPID: true
       dnsPolicy: ClusterFirst
       containers:
-        - name: disk-driver-registrar
-          image: registry-cn-hangzhou.ack.aliyuncs.com/acs/csi-node-driver-registrar:v2.3.1-038aeb6-aliyun
-          resources:
-            requests:
-              cpu: 10m
-              memory: 16Mi
-            limits:
-              cpu: 500m
-              memory: 1024Mi
-          args:
-            - "--v=5"
-            - "--csi-address=/var/lib/kubelet/csi-plugins/diskplugin.csi.alibabacloud.com/csi.sock"
-            - "--kubelet-registration-path=/var/lib/kubelet/csi-plugins/diskplugin.csi.alibabacloud.com/csi.sock"
-          volumeMounts:
-            - name: kubelet-dir
-              mountPath: /var/lib/kubelet
-            - name: registration-dir
-              mountPath: /registration
-        - name: nas-driver-registrar
-          image: registry-cn-hangzhou.ack.aliyuncs.com/acs/csi-node-driver-registrar:v2.3.1-038aeb6-aliyun
-          resources:
-            requests:
-              cpu: 10m
-              memory: 16Mi
-            limits:
-              cpu: 500m
-              memory: 1024Mi
-          args:
-            - "--v=5"
-            - "--csi-address=/var/lib/kubelet/csi-plugins/nasplugin.csi.alibabacloud.com/csi.sock"
-            - "--kubelet-registration-path=/var/lib/kubelet/csi-plugins/nasplugin.csi.alibabacloud.com/csi.sock"
-          volumeMounts:
-            - name: kubelet-dir
-              mountPath: /var/lib/kubelet/
-            - name: registration-dir
-              mountPath: /registration
         - name: oss-driver-registrar
           image: registry-cn-hangzhou.ack.aliyuncs.com/acs/csi-node-driver-registrar:v2.3.1-038aeb6-aliyun
           resources:
@@ -90,11 +54,11 @@ spec:
           securityContext:
             privileged: true
             allowPrivilegeEscalation: true
-          image: registry-cn-hangzhou.ack.aliyuncs.com/acs/csi-plugin:v1.24.9-74f8490-aliyun
+          image: wujunyi792/oss-csi-lite-plugin:amd64-v1.22.14-hack-5dff489
+          imagePullPolicy: Always
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--v=2"
-            - "--driver=oss,nas,disk"
           env:
             - name: KUBE_NODE_NAME
               valueFrom:
@@ -102,11 +66,13 @@ spec:
                   apiVersion: v1
                   fieldPath: spec.nodeName
             - name: CSI_ENDPOINT
-              value: unix://var/lib/kubelet/csi-plugins/driverplugin.csi.alibabacloud.com-replace/csi.sock
+              value: unix://var/lib/kubelet/csi-plugins/ossplugin.csi.alibabacloud.com/csi.sock
             - name: MAX_VOLUMES_PERNODE
               value: "15"
             - name: SERVICE_TYPE
               value: "plugin"
+            - name: REGION_ID
+              value: "oss-cn-hangzhou"
           resources:
             requests:
               cpu: 100m
