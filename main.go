@@ -71,7 +71,7 @@ var REVISION = ""
 
 var (
 	endpoint = flag.String("endpoint", "unix://tmp/csi.sock", "CSI endpoint")
-	nodeID   = flag.String("nodeid", "114514", "node id")
+	nodeID   = flag.String("nodeid", "", "node id")
 )
 
 type globalMetricConfig struct {

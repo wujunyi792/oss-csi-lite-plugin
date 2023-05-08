@@ -17,7 +17,6 @@ limitations under the License.
 package utils
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,21 +26,15 @@ import (
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/mount"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
-	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/go-ping/ping"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -159,30 +152,6 @@ func NewEventRecorder() record.EventRecorder {
 	return broadcaster.NewRecorder(scheme.Scheme, source)
 }
 
-// Succeed return a Succeed Result
-func Succeed(a ...interface{}) Result {
-	return Result{
-		Status:  "Success",
-		Message: fmt.Sprint(a...),
-	}
-}
-
-// NotSupport return a NotSupport Result
-func NotSupport(a ...interface{}) Result {
-	return Result{
-		Status:  "Not supported",
-		Message: fmt.Sprint(a...),
-	}
-}
-
-// Fail return a Fail Result
-func Fail(a ...interface{}) Result {
-	return Result{
-		Status:  "Failure",
-		Message: fmt.Sprint(a...),
-	}
-}
-
 // Result struct definition
 type Result struct {
 	Status  string `json:"status"`
@@ -263,22 +232,6 @@ func RunWithFilter(cmd string, filter ...string) ([]string, error) {
 	return ans, nil
 }
 
-// RunTimeout tag
-func RunTimeout(cmd string, timeout int) error {
-	ctx := context.Background()
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-		defer cancel()
-	}
-
-	cmdCont := exec.CommandContext(ctx, "sh", "-c", cmd)
-	if err := cmdCont.Run(); err != nil {
-		return err
-	}
-	return nil
-}
-
 // CreateDest create de destination dir
 func CreateDest(dest string) error {
 	fi, err := os.Lstat(dest)
@@ -293,16 +246,6 @@ func CreateDest(dest string) error {
 
 	if fi != nil && !fi.IsDir() {
 		return fmt.Errorf("%v already exist but it's not a directory", dest)
-	}
-	return nil
-}
-
-// CreateDestInHost create host dest directory
-func CreateDestInHost(dest string) error {
-	cmd := fmt.Sprintf("%s mkdir -p %s", NsenterCmd, dest)
-	_, err := Run(cmd)
-	if err != nil {
-		return err
 	}
 	return nil
 }
@@ -332,53 +275,6 @@ func IsLikelyNotMountPoint(file string) (bool, error) {
 	return true, nil
 }
 
-// IsMounted return status of mount operation
-func IsMounted(mountPath string) bool {
-	stdout, err := RunWithFilter("mount", mountPath)
-	if err != nil {
-		log.Infof("IsMounted: Exec command mount is failed, err: %s, %s", stdout, err.Error())
-		return false
-	}
-	if len(stdout) == 0 {
-		return false
-	}
-	return true
-}
-
-// IsMountedInHost return status of host mounted or not
-func IsMountedInHost(mountPath string) bool {
-	cmd := fmt.Sprintf("%s mount", NsenterCmd)
-	stdout, err := RunWithFilter(cmd, mountPath)
-	if err != nil {
-		log.Infof("IsMounted: Exec command %s is failed, err: %s", cmd, err.Error())
-		return false
-	}
-	if len(stdout) == 0 {
-		return false
-	}
-	return true
-}
-
-// UmountInHost do an unmount operation
-func UmountInHost(mountPath string) error {
-	cmd := fmt.Sprintf("%s umount %s", NsenterCmd, mountPath)
-	_, err := Run(cmd)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// Umount do an unmount operation
-func Umount(mountPath string) error {
-	cmd := fmt.Sprintf("umount %s", mountPath)
-	_, err := Run(cmd)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // IsFileExisting check file exist in volume driver or not
 func IsFileExisting(filename string) bool {
 	_, err := os.Stat(filename)
@@ -389,67 +285,6 @@ func IsFileExisting(filename string) bool {
 		return false
 	}
 	return true
-}
-
-// GetRegionAndInstanceID get region and instanceID object
-func GetRegionAndInstanceID() (string, string, error) {
-	regionID, err := GetMetaData(RegionIDTag)
-	if err != nil {
-		return "", "", err
-	}
-	instanceID, err := GetMetaData(InstanceIDTag)
-	if err != nil {
-		return "", "", err
-	}
-	return regionID, instanceID, nil
-}
-
-// GetMetaData get metadata from ecs meta-server
-func GetMetaData(resource string) (string, error) {
-	resp, err := http.Get(MetadataURL + resource)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
-}
-
-// RetryGetMetaData ...
-func RetryGetMetaData(resource string) string {
-	var nodeID string
-	for i := 0; i < MetadataMaxRetrycount; i++ {
-		nodeID, _ = GetMetaData(resource)
-		if nodeID != "" && !strings.Contains(nodeID, "Error 500 Internal Server Error") {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	if nodeID == "" || strings.Contains(nodeID, "Error 500 Internal Server Error") {
-		log.Fatalf("RetryGetMetadata: failed to get instanceId: %s from metadataserver %s after 4 retrys", nodeID, MetadataURL+resource)
-	}
-	log.Infof("RetryGetMetaData: successful get metadata %v: %v", resource, nodeID)
-	return nodeID
-}
-
-// GetRegionIDAndInstanceID get regionID and instanceID object
-func GetRegionIDAndInstanceID(nodeName string) (string, string, error) {
-	strs := strings.SplitN(nodeName, ".", 2)
-	if len(strs) < 2 {
-		return "", "", fmt.Errorf("failed to get regionID and instanceId from nodeName")
-	}
-	return strs[0], strs[1], nil
-}
-
-func Gi2Bytes(gb int64) int64 {
-	return gb * 1024 * 1024 * 1024
-}
-
-func KBlock2Bytes(kblocks int64) int64 {
-	return kblocks * 1024
 }
 
 // ReadJSONFile return a json object
@@ -464,34 +299,6 @@ func ReadJSONFile(file string) (map[string]string, error) {
 		return nil, err
 	}
 	return jsonObj, nil
-}
-
-// NewEcsClient create a ecsClient object
-func NewEcsClient(ac AccessControl) (ecsClient *ecs.Client) {
-	var err error
-	switch ac.UseMode {
-	case AccessKey:
-		ecsClient, err = ecs.NewClientWithAccessKey(DefaultRegion, ac.AccessKeyID, ac.AccessKeySecret)
-	case Credential:
-		ecsClient, err = ecs.NewClientWithOptions(DefaultRegion, ac.Config, ac.Credential)
-	default:
-		ecsClient, err = ecs.NewClientWithStsToken(DefaultRegion, ac.AccessKeyID, ac.AccessKeySecret, ac.StsToken)
-
-	}
-
-	if err != nil {
-		return nil
-	}
-	return
-}
-
-// IsDir check file is directory
-func IsDir(path string) bool {
-	s, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return s.IsDir()
 }
 
 // GetMetrics get path metric
@@ -561,131 +368,6 @@ func GetMetrics(path string) (*csi.NodeGetVolumeStatsResponse, error) {
 	}, nil
 }
 
-// GetFileContent get file content
-func GetFileContent(fileName string) string {
-	volumeFile := path.Join(fileName)
-	if !IsFileExisting(volumeFile) {
-		return ""
-	}
-	value, err := ioutil.ReadFile(volumeFile)
-	if err != nil {
-		return ""
-	}
-	devicePath := strings.TrimSpace(string(value))
-	return devicePath
-}
-
-// WriteJSONFile save json data to file
-func WriteJSONFile(obj interface{}, file string) error {
-	maps := make(map[string]interface{})
-	t := reflect.TypeOf(obj)
-	v := reflect.ValueOf(obj)
-	for i := 0; i < v.NumField(); i++ {
-		if v.Field(i).String() != "" {
-			maps[t.Field(i).Name] = v.Field(i).String()
-		}
-	}
-	rankingsJSON, _ := json.Marshal(maps)
-	if err := ioutil.WriteFile(file, rankingsJSON, 0644); err != nil {
-		return err
-	}
-	return nil
-}
-
-// GetPodRunTime Get Pod runtimeclass config
-// Default as runc.
-func GetPodRunTime(req *csi.NodePublishVolumeRequest, clientSet *kubernetes.Clientset) (string, error) {
-	// if pod name namespace is empty, use default
-	podName, nameSpace := "", ""
-	if value, ok := req.VolumeContext["csi.storage.k8s.io/pod.name"]; ok {
-		podName = value
-	}
-	if value, ok := req.VolumeContext["csi.storage.k8s.io/pod.namespace"]; ok {
-		nameSpace = value
-	}
-	if podName == "" || nameSpace == "" {
-		log.Warnf("GetPodRunTime: Rreceive Request with Empty name or namespace: %s, %s", podName, nameSpace)
-		return "", fmt.Errorf("GetPodRunTime: Rreceive Request with Empty name or namespace")
-	}
-
-	podInfo, err := clientSet.CoreV1().Pods(nameSpace).Get(context.Background(), podName, metav1.GetOptions{})
-	if err != nil {
-		log.Errorf("GetPodRunTime: Get PodInfo(%s, %s) with error: %s", podName, nameSpace, err.Error())
-		return "", fmt.Errorf("GetPodRunTime: Get PodInfo(%s, %s) with error: %s", podName, nameSpace, err.Error())
-	}
-	runTimeValue := RuncRunTimeTag
-
-	// check pod.Spec.RuntimeClassName == "runv"
-	if podInfo.Spec.RuntimeClassName == nil {
-		log.Infof("GetPodRunTime: Get without runtime(nil), %s, %s", podName, nameSpace)
-	} else if *podInfo.Spec.RuntimeClassName == "" {
-		log.Infof("GetPodRunTime: Get with empty runtime: %s, %s", podName, nameSpace)
-	} else {
-		log.Infof("GetPodRunTime: Get PodInfo Successful: %s, %s, with runtime: %s", podName, nameSpace, *podInfo.Spec.RuntimeClassName)
-		if strings.TrimSpace(*podInfo.Spec.RuntimeClassName) == RunvRunTimeTag {
-			runTimeValue = RunvRunTimeTag
-		}
-	}
-
-	// Deprecated pouch为了支持k8s 1.12以前没有RuntimeClass的情况做的特殊逻辑，为了代码健壮性，这里做下支持
-	if podInfo.Annotations["io.kubernetes.runtime"] == "kata-runtime" {
-		log.Infof("RunTime: Send with runtime: %s, %s, %s", podName, nameSpace, "runv")
-		runTimeValue = RunvRunTimeTag
-	}
-
-	// check Annotation[io.kubernetes.cri.untrusted-workload] = true
-	if value, ok := podInfo.Annotations["io.kubernetes.cri.untrusted-workload"]; ok && strings.TrimSpace(value) == "true" {
-		runTimeValue = RunvRunTimeTag
-	}
-	return runTimeValue, nil
-}
-
-// IsMountPointRunv check the mountpoint is runv style
-func IsMountPointRunv(mountPoint string) bool {
-	if IsMounted(mountPoint) {
-		return false
-	}
-	mountFileName := filepath.Join(mountPoint, CsiPluginRunTimeFlagFile)
-	if IsFileExisting(mountFileName) {
-		mountInfo := GetFileContent(mountFileName)
-		mountInfo = strings.ToLower(mountInfo)
-		maps := map[string]string{}
-		if err := json.Unmarshal([]byte(mountInfo), &maps); err != nil {
-			return false
-		}
-		if value, ok := maps["mountfile"]; ok && value == mountFileName {
-			if valuert, okrt := maps["runtime"]; okrt && valuert == "runv" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// Ping check network like shell ping command
-func Ping(ipAddress string) (*ping.Statistics, error) {
-	pinger, err := ping.NewPinger(ipAddress)
-	if err != nil {
-		return nil, err
-	}
-	pinger.SetPrivileged(true)
-	pinger.Count = 1
-	pinger.Timeout = time.Second * 2
-	pinger.Run()
-	stats := pinger.Statistics()
-	return stats, nil
-}
-
-// IsDirTmpfs check path is tmpfs mounted or not
-func IsDirTmpfs(path string) bool {
-	cmd := fmt.Sprintf("findmnt %s -o FSTYPE -n", path)
-	fsType, err := Run(cmd)
-	if err == nil && strings.TrimSpace(fsType) == "tmpfs" {
-		return true
-	}
-	return false
-}
-
 // WriteAndSyncFile behaves just like ioutil.WriteFile in the standard library,
 // but calls Sync before closing the file. WriteAndSyncFile guarantees the data
 // is synced if there is no error returned.
@@ -712,68 +394,6 @@ func Fsync(f *os.File) error {
 	return f.Sync()
 }
 
-// SetNodeAddrMap set map with mutex
-func SetNodeAddrMap(key string, value string) {
-	NodeAddrMutex.Lock()
-	NodeAddrMap[key] = value
-	NodeAddrMutex.Unlock()
-}
-
-// GetNodeAddr get node address
-func GetNodeAddr(client kubernetes.Interface, node string, port string) (string, error) {
-	ip, err := GetNodeIP(client, node)
-	if err != nil {
-		return "", err
-	}
-	return ip.String() + ":" + port, nil
-}
-
-// GetNodeIP get node address
-func GetNodeIP(client kubernetes.Interface, nodeID string) (net.IP, error) {
-	if value, ok := NodeAddrMap[nodeID]; ok && value != "" {
-		return net.ParseIP(value), nil
-	}
-	node, err := client.CoreV1().Nodes().Get(context.Background(), nodeID, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	addresses := node.Status.Addresses
-	addressMap := make(map[v1.NodeAddressType][]v1.NodeAddress)
-	for i := range addresses {
-		addressMap[addresses[i].Type] = append(addressMap[addresses[i].Type], addresses[i])
-	}
-	if addresses, ok := addressMap[v1.NodeInternalIP]; ok {
-		SetNodeAddrMap(nodeID, addresses[0].Address)
-		return net.ParseIP(addresses[0].Address), nil
-	}
-	if addresses, ok := addressMap[v1.NodeExternalIP]; ok {
-		SetNodeAddrMap(nodeID, addresses[0].Address)
-		return net.ParseIP(addresses[0].Address), nil
-	}
-	return nil, fmt.Errorf("Node IP unknown; known addresses: %v", addresses)
-}
-
-// CheckParameterValidate is check parameter validating in csi-plugin
-func CheckParameterValidate(inputs []string) bool {
-	for _, input := range inputs {
-		if matched, err := regexp.MatchString("^[A-Za-z0-9=._@:~/-]*$", input); err != nil || !matched {
-			return false
-		}
-	}
-	return true
-}
-
-// CheckQuotaPathValidate is check quota path validating in csi-plugin
-func CheckQuotaPathValidate(kubeClient *kubernetes.Clientset, path string) error {
-	pvName := filepath.Base(path)
-	_, err := kubeClient.CoreV1().PersistentVolumes().Get(context.Background(), pvName, metav1.GetOptions{})
-	if err != nil {
-		log.Errorf("utils.CheckQuotaPathValidate %s cannot find volume, error: %s", path, err.Error())
-		return err
-	}
-	return nil
-}
-
 // IsHostFileExist is check host file is existing in lvm
 func IsHostFileExist(path string) bool {
 	args := []string{NsenterCmd, "stat", path}
@@ -784,19 +404,6 @@ func IsHostFileExist(path string) bool {
 	}
 
 	return true
-}
-
-// GetPvNameFormPodMnt get pv name
-func GetPvNameFormPodMnt(mntPath string) string {
-	if mntPath == "" {
-		return ""
-	}
-	if strings.HasSuffix(mntPath, "/mount") {
-		tmpPath := mntPath[0 : len(mntPath)-6]
-		pvName := filepath.Base(tmpPath)
-		return pvName
-	}
-	return ""
 }
 
 func DoMountInHost(mntCmd string) error {
@@ -833,66 +440,6 @@ func ConnectorRun(cmd string) (string, error) {
 		return respstr, nil
 	}
 	return response, errors.New("Exec command error:" + response)
-}
-
-// AppendJSONData append map data to json file.
-func AppendJSONData(dataFilePath string, appData map[string]string) error {
-	curData, err := LoadJSONData(dataFilePath)
-	if err != nil {
-		return err
-	}
-	for key, value := range appData {
-		if strings.HasPrefix(key, "csi.alibabacloud.com/") {
-			curData[key] = value
-		}
-	}
-	rankingsJSON, _ := json.Marshal(curData)
-	if err := ioutil.WriteFile(dataFilePath, rankingsJSON, 0644); err != nil {
-		return err
-	}
-
-	log.Infof("AppendJSONData: Json data file saved successfully [%s], content: %v", dataFilePath, curData)
-	return nil
-}
-
-// LoadJSONData loads json info from specified json file
-func LoadJSONData(dataFileName string) (map[string]string, error) {
-	file, err := os.Open(dataFileName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open json data file [%s]: %v", dataFileName, err)
-	}
-	defer file.Close()
-	data := map[string]string{}
-	if err := json.NewDecoder(file).Decode(&data); err != nil {
-		return nil, fmt.Errorf("failed to parse json data file [%s]: %v", dataFileName, err)
-	}
-	return data, nil
-}
-
-// IsKataInstall check kata daemon installed
-func IsKataInstall() bool {
-	if IsFileExisting("/host/etc/kata-containers") || IsFileExisting("/host/etc/kata-containers2") {
-		return true
-	}
-	return false
-}
-
-// IsPathAvailiable
-func IsPathAvailiable(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("Open Path (%s) with error: %v ", path, err)
-	}
-	defer f.Close()
-	_, err = f.Readdirnames(1)
-	if err != nil && err != io.EOF {
-		return fmt.Errorf("Read Path (%s) with error: %v ", path, err)
-	}
-	return nil
-}
-
-func RemoveAll(deletePath string) error {
-	return os.RemoveAll(deletePath)
 }
 
 func MkdirAll(path string, mode fs.FileMode) error {

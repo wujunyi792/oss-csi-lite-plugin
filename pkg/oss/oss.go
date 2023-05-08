@@ -19,13 +19,13 @@ package oss
 import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/drivers/pkg/csi-common"
+	uuid "github.com/satori/go.uuid"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 	k8smount "k8s.io/utils/mount"
 	"sync"
 	"wujunyi792/oss-csi-lite-plugin/pkg/options"
-	"wujunyi792/oss-csi-lite-plugin/pkg/utils"
 )
 
 const (
@@ -55,7 +55,7 @@ func NewDriver(nodeID, endpoint string) *OSS {
 	d.endpoint = endpoint
 
 	if nodeID == "" {
-		nodeID = utils.RetryGetMetaData(InstanceID)
+		nodeID = uuid.NewV4().String()
 		log.Infof("Use node id : %s", nodeID)
 	}
 	csiDriver := csicommon.NewCSIDriver(driverName, version, nodeID)
