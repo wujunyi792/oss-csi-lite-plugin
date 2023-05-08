@@ -1,6 +1,4 @@
-FROM registry.cn-hangzhou.aliyuncs.com/plugins/centos:7.9.2009
-LABEL maintainers="Alibaba Cloud Authors"
-LABEL description="Alibaba Cloud CSI Plugin"
+FROM centos:7
 
 COPY freezefs.sh /freezefs.sh
 RUN curl https://aliyun-alinas-eac.oss-cn-beijing.aliyuncs.com/alinas-efc-1.2-2.x86_64.rpm -o /root/alinas-efc-1.2-2.x86_64.rpm

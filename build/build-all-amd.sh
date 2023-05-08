@@ -14,7 +14,7 @@ else
     PROJECT_ROOT="$git_root"
 fi
 
-cd "${PROJECT_ROOT}"/alibaba-cloud-csi-driver/
+cd "${PROJECT_ROOT}"/
 
 rm -rf build/amd/csiplugin-connector.go build/amd/csiplugin-connector-svc build/amd/csiplugin-connector
 
@@ -38,8 +38,8 @@ cd "${PROJECT_ROOT}"/build/amd/
 CGO_ENABLED=0 go build csiplugin-connector.go
 
 if [ "$1" == "" ]; then
-  mv "${PROJECT_ROOT}"plugin.csi.alibabacloud.com ./
-  docker build -t=wujunyi792/oss-csi-lite-plugin:amd64-$VERSION-"$GIT_HASH" ./
-  rm -rf csiplugin-connector.go csiplugin-connector.service csiplugin-connector nsenter amd64-entrypoint.sh freezefs.sh
+  mv "${PROJECT_ROOT}"/plugin.csi.alibabacloud.com ./
+  docker build --platform=amd64 -t=wujunyi792/oss-csi-lite-plugin:amd64-$VERSION-"$GIT_HASH" ./
+  find . -type f ! -name 'Dockerfile' -delete -o -type d -empty -delete
   docker push wujunyi792/oss-csi-lite-plugin:amd64-$VERSION-"$GIT_HASH"
 fi
