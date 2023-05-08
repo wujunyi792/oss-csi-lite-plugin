@@ -54,8 +54,8 @@ spec:
           securityContext:
             privileged: true
             allowPrivilegeEscalation: true
-          image: wujunyi792/oss-csi-lite-plugin:amd64-v1.22.14-hack-6a83249
-          imagePullPolicy: Always
+          image: wujunyi792/oss-csi-lite-plugin:amd64-v1.22.14-hack-8597838
+          imagePullPolicy: IfNotPresent
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--v=2"
