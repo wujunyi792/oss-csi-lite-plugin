@@ -3,24 +3,24 @@
 项目来源于[阿里云Kubernetes CSI插件](https://github.com/kubernetes-sigs/alibaba-cloud-csi-driver)，原插件功能强大， 支持将云盘、NAS、CPFS、OSS、LVM作为集群PV。
 但是，如果用的是自建集群，且不使用[自建集群](https://help.aliyun.com/document_detail/121053.html)的方式接入阿里云，我们无法使用该工具（需要内网）。
 
-**2023.3月，alibaba-cloud-csi-driver发布了全新版本，更新了部署yaml，但是文档没有跟上，所以很坑**
+**2023.3月，alibaba-cloud-csi-driver 发布了全新版本，更新了部署yaml，但是文档没有跟上，所以很坑**
 
 本仓库针对个人需求对源代码进行了删改，完美解决了个人需求：
-- 只需要支持amd64处理机
-- 只需要支持OSS作为存储卷
+- 只需要支持 amd64 处理机
+- 只需要支持 oss 作为存储卷
 - 集群结点不算多
 
 如果你的需求和我一样，那么可以参考本项目，或者跟着本教程直接使用
 
 ## 1. 安装步骤
-### 1.1 宿主机安装ossfs
-“ossfs能让您在Linux系统中，将对象存储OSS的存储空间（Bucket）挂载到本地文件系统中，您能够像操作本地文件一样操作OSS的对象（Object），实现数据的共享。”
+### 1.1 宿主机安装 ossfs
+“ossfs 能让您在 Linux 系统中，将对象存储OSS的存储空间（Bucket）挂载到本地文件系统中，您能够像操作本地文件一样操作OSS的对象（Object），实现数据的共享。”
 
-在原仓库中，宿主机中的ossfs由容器中nsenter管理安装和更新。但是版本非常混乱，因此综合考虑，自己手动为ossfs安装比较方便。
+在原仓库中，宿主机中的 ossfs 由容器中 nsenter 管理安装和更新。但是版本非常混乱，因此综合考虑，自己手动为 ossfs 安装比较方便。
 
-**必须为每一台node安装**，因此假如结点很多，这个方法对你来说不合适（原脚本中会判断宿主机中的OS类型完成安装，但是我还是把这些逻辑删了，因为总会出现离奇bug）。
+**必须为每一台 node 安装**，因此假如结点很多，这个方法对你来说不合适（原脚本中会判断宿主机中的OS类型完成安装，但是我还是把这些逻辑删了，因为总会出现离奇 bug）。
 
-安装过程参考[ossfs 快速安装](https://help.aliyun.com/document_detail/153892.htm)，安装包给的不多，个人推荐**源码安装**，因为真的比直接下载二进制包方便（仅对于ossfs，官方安装包有点旧）。
+安装过程参考[ossfs 快速安装](https://help.aliyun.com/document_detail/153892.htm)，安装包给的不多，个人推荐**源码安装**，因为真的比直接下载二进制包方便（仅对于 ossfs，官方安装包有点旧）。
 源码安装过程直接看[ossfs Github](https://github.com/aliyun/ossfs)，以Ubuntu为例，步骤示例如下：
 ```shell
 apt-get install automake autotools-dev g++ git libcurl4-gnutls-dev \
@@ -34,7 +34,7 @@ sudo make install
 ```
 
 ### 1.2 k8s安装依赖
-在集群中部署[01-rbac.yaml](deploy%2F01-rbac.yaml)和[02-csi-driver.yaml](deploy%2F02-csi-driver.yaml)，分别用于声明权限和定义插件执行Node Attach的方式。文件均来自原仓库同路径文件，直接apply即可：
+在集群中部署[01-rbac.yaml](deploy%2F01-rbac.yaml)和[02-csi-driver.yaml](deploy%2F02-csi-driver.yaml)，分别用于声明权限和定义插件执行 Node Attach 的方式。文件均来自原仓库同路径文件，直接 apply 即可：
 ```shell
 kubectl apply -f ./deploy/01-rbac.yaml
 kubectl apply -f ./deploy/02-csi-driver.yaml
@@ -47,10 +47,10 @@ kubectl apply -f ./deploy/02-csi-driver.yaml
 ```shell
 kubectl apply -f ./deploy/03-csi-plugin
 ```
-稍等片刻，容器启动成功，你的集群每个结点都会运行csi-plugin的pod
+稍等片刻，容器启动成功，你的集群每个结点都会运行 csi-plugin 的 pod
 ![img.png](pic%2Fpic1.png)
 
-当然，你也可以自己构建镜像（本仓库只支持amd），步骤如下：
+当然，你也可以自己构建镜像（本仓库只支持 amd），步骤如下：
 1. 修改[build-amd64-image.sh](build%2Fbuild-amd64-image.sh)中的仓库地址等信息
 2. `cd build && sh build-amd64-image.sh`
 3. 稍等片刻，镜像就会推送到自己的仓库
@@ -59,7 +59,7 @@ kubectl apply -f ./deploy/03-csi-plugin
 ## 2. 测试步骤
 oss的csi插件已经部署完成，我们接下来创建pv,pvc和一个nginx来做测试。测试yaml同样来自于原仓库
 ### 2.1 配置存储桶
-这里就不细说了，去阿里云oss开一个bucket，然后申请一对AccessID和AccessKey，填写在[01-pv.yaml](examples%2F01-pv.yaml)中，其中`url`为oss外网Endpoint，可在[访问域名和数据中心
+这里就不细说了，去阿里云 oss 开一个 bucket，然后申请一对 AccessID 和 AccessKey，填写在[01-pv.yaml](examples%2F01-pv.yaml)中，其中`url`为 oss 外网 Endpoint，可在[访问域名和数据中心
 ](https://help.aliyun.com/document_detail/31837.html)查看
 
 ### 2.2 部署pv pvc
