@@ -51,6 +51,7 @@ kubectl apply -f ./deploy/03-csi-plugin
 ![img.png](pic%2Fpic1.png)
 
 当然，你也可以自己构建镜像（本仓库只支持 amd），步骤如下：
+0. 安装 Golang 1.18 以上版本
 1. 修改[build-amd64-image.sh](build%2Fbuild-amd64-image.sh)中的仓库地址等信息
 2. `cd build && sh build-amd64-image.sh`
 3. 稍等片刻，镜像就会推送到自己的仓库
